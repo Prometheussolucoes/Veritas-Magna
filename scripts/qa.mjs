@@ -1,0 +1,201 @@
+import puppeteer from 'puppeteer-core';
+
+const URL = 'http://localhost:4173/index.html';
+const results = [];
+function log(name, ok, detail) {
+  results.push({ name, ok, detail });
+  console.log((ok ? 'OK  ' : 'FAIL') + ' - ' + name + (detail ? ' :: ' + detail : ''));
+}
+
+const browser = await puppeteer.launch({
+  executablePath: '/opt/pw-browsers/chromium',
+  headless: true,
+  args: ['--no-sandbox', '--disable-gpu'],
+});
+
+try {
+  const page = await browser.newPage();
+  const consoleErrors = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+  page.on('pageerror', (err) => consoleErrors.push(String(err)));
+
+  // ---------- Desktop viewport ----------
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.goto(URL, { waitUntil: 'networkidle0' });
+
+  const title = await page.title();
+  log('Title presente', title && title.length > 10, title);
+
+  const h1Count = await page.$$eval('h1', (els) => els.length);
+  log('Exatamente um H1', h1Count === 1, 'h1 count=' + h1Count);
+
+  const metaDesc = await page.$eval('meta[name="description"]', (el) => el.content).catch(() => null);
+  log('Meta description presente', !!metaDesc && metaDesc.length > 20);
+
+  const ogTitle = await page.$eval('meta[property="og:title"]', (el) => el.content).catch(() => null);
+  log('OG title presente', !!ogTitle);
+
+  const canonical = await page.$eval('link[rel="canonical"]', (el) => el.href).catch(() => null);
+  log('Canonical presente', !!canonical);
+
+  // Overflow horizontal desktop
+  const overflowDesktop = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  log('Sem overflow horizontal (desktop 1440px)', overflowDesktop <= 0, 'diff=' + overflowDesktop);
+
+  // Links externos com rel=noopener noreferrer
+  const externalLinksOk = await page.evaluate(() => {
+    const links = Array.from(document.querySelectorAll('a[target="_blank"]'));
+    return links.every((a) => (a.rel || '').includes('noopener') && (a.rel || '').includes('noreferrer'));
+  });
+  log('Todos os links target=_blank têm rel=noopener noreferrer', externalLinksOk);
+
+  // Imagens com alt
+  const imagesWithoutAlt = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('img')).filter((img) => img.getAttribute('alt') === null).length
+  );
+  log('Todas as imagens têm atributo alt', imagesWithoutAlt === 0, 'sem alt=' + imagesWithoutAlt);
+
+  // ---------- Menu mobile ----------
+  await page.setViewport({ width: 375, height: 800 });
+  await page.reload({ waitUntil: 'networkidle0' });
+
+  const overflowMobile = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  log('Sem overflow horizontal (mobile 375px)', overflowMobile <= 0, 'diff=' + overflowMobile);
+
+  const menuHiddenInicialmente = await page.$eval('#menu-mobile', (el) => el.classList.contains('hidden'));
+  log('Menu mobile começa fechado', menuHiddenInicialmente);
+
+  await page.click('#menu-toggle');
+  const menuAbertoAria = await page.$eval('#menu-toggle', (el) => el.getAttribute('aria-expanded'));
+  const menuAbertoClasse = await page.$eval('#menu-mobile', (el) => !el.classList.contains('hidden'));
+  log('Menu mobile abre e seta aria-expanded=true', menuAbertoAria === 'true' && menuAbertoClasse);
+
+  await page.click('#menu-toggle');
+  const menuFechadoDeNovo = await page.$eval('#menu-mobile', (el) => el.classList.contains('hidden'));
+  log('Menu mobile fecha ao clicar novamente', menuFechadoDeNovo);
+
+  // ---------- Modal política de privacidade + bloqueio de scroll ----------
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.click('[data-abre-modal="modal-privacidade"]');
+  await new Promise((r) => setTimeout(r, 100));
+  const modalAberto = await page.$eval('#modal-privacidade', (el) => !el.classList.contains('hidden'));
+  const bodyOverflowAberto = await page.evaluate(() => getComputedStyle(document.body).overflow);
+  log('Modal de privacidade abre', modalAberto);
+  log('Rolagem do body bloqueada com modal aberto', bodyOverflowAberto === 'hidden', bodyOverflowAberto);
+
+  await page.click('#modal-privacidade [data-fecha-modal]');
+  await new Promise((r) => setTimeout(r, 100));
+  const modalFechado = await page.$eval('#modal-privacidade', (el) => el.classList.contains('hidden'));
+  const bodyOverflowFechado = await page.evaluate(() => getComputedStyle(document.body).overflow);
+  log('Modal de privacidade fecha', modalFechado);
+  log('Rolagem do body restaurada após fechar modal', bodyOverflowFechado !== 'hidden', bodyOverflowFechado);
+
+  // ---------- Cookie banner + localStorage ----------
+  const bannerVisivelInicial = await page.$eval('#banner-cookies', (el) => !el.classList.contains('hidden'));
+  log('Banner de cookies aparece sem consentimento salvo', bannerVisivelInicial);
+
+  await page.click('#btn-aceitar-cookies');
+  await new Promise((r) => setTimeout(r, 100));
+  const bannerEscondidoDepois = await page.$eval('#banner-cookies', (el) => el.classList.contains('hidden'));
+  const consentimentoSalvo = await page.evaluate(() => localStorage.getItem('vm_cookie_consent'));
+  log('Banner some após aceitar', bannerEscondidoDepois);
+  log('Consentimento persistido em localStorage', !!consentimentoSalvo, consentimentoSalvo);
+
+  await page.reload({ waitUntil: 'networkidle0' });
+  const bannerNaoReaparece = await page.$eval('#banner-cookies', (el) => el.classList.contains('hidden'));
+  log('Banner não reaparece após reload (consentimento lembrado)', bannerNaoReaparece);
+
+  // ---------- Formulário: dados maliciosos devem ser bloqueados ----------
+  await page.evaluate(() => localStorage.clear());
+  await page.type('#nome', '<script>alert(1)</script>');
+  await page.type('#email', 'nao-e-email');
+  await page.type('#telefone', '123');
+  await page.click('#formulario button[type="submit"]');
+  await new Promise((r) => setTimeout(r, 150));
+
+  const nomeInvalido = await page.$eval('#nome', (el) => el.getAttribute('aria-invalid'));
+  const emailInvalido = await page.$eval('#email', (el) => el.getAttribute('aria-invalid'));
+  const telefoneInvalido = await page.$eval('#telefone', (el) => el.getAttribute('aria-invalid'));
+  log('Nome com <script> é bloqueado (aria-invalid)', nomeInvalido === 'true');
+  log('E-mail inválido é bloqueado (aria-invalid)', emailInvalido === 'true');
+  log('Telefone inválido é bloqueado (aria-invalid)', telefoneInvalido === 'true');
+
+  const statusAposInvalido = await page.$eval('#form-status', (el) => el.textContent);
+  log('Mensagem de status orienta correção', /corrija/i.test(statusAposInvalido || ''), statusAposInvalido);
+
+  // Garante que o script malicioso não foi parar no DOM sem escape
+  const scriptInjetado = await page.evaluate(() => document.querySelectorAll('#formulario script').length);
+  log('Nenhuma tag <script> injetada no DOM via formulário', scriptInjetado === 0);
+
+  // ---------- Formulário: dados válidos + checkboxes ----------
+  await page.evaluate(() => {
+    document.getElementById('nome').value = '';
+    document.getElementById('email').value = '';
+    document.getElementById('telefone').value = '';
+  });
+  await page.type('#nome', 'Maria da Silva Souza');
+  await page.type('#email', 'maria.silva@example.com');
+  await page.type('#telefone', '(21) 91234-5678');
+  await page.type('#mensagem', 'Projeto com convênio municipal, prestação de contas trimestral.');
+
+  // Impede a navegação real (abertura de aba do WhatsApp) durante o teste
+  await page.evaluate(() => {
+    window.__opened = null;
+    window.open = (url) => {
+      window.__opened = url;
+      return null;
+    };
+  });
+
+  await page.click('#aceite-etica');
+  await page.click('#aceite-lgpd');
+  await page.click('#formulario button[type="submit"]');
+  await new Promise((r) => setTimeout(r, 800));
+
+  const nomeValidoOk = await page.$eval('#nome', (el) => el.getAttribute('aria-invalid'));
+  log('Nome válido não fica marcado como inválido', nomeValidoOk === null);
+
+  const statusFinal = await page.$eval('#form-status', (el) => el.textContent);
+  const whatsappUrl = await page.evaluate(() => window.__opened);
+  log('Fluxo de sucesso exibe mensagem final', /sucesso|whatsapp/i.test(statusFinal || ''), statusFinal);
+  log('Fallback abre WhatsApp com dados sanitizados (sem backend)', !!whatsappUrl && whatsappUrl.includes('wa.me'), whatsappUrl);
+
+  // ---------- Honeypot ----------
+  await page.evaluate(() => {
+    document.getElementById('form-diagnostico').reset();
+  });
+  await page.type('#nome', 'Robo Spam Bot');
+  await page.type('#email', 'robo@spam.com');
+  await page.type('#telefone', '(21) 90000-0000');
+  await page.evaluate(() => {
+    document.getElementById('website').value = 'http://spam.example';
+    window.__opened = null;
+  });
+  await page.click('#aceite-etica');
+  await page.click('#aceite-lgpd');
+  await page.click('#formulario button[type="submit"]');
+  await new Promise((r) => setTimeout(r, 300));
+  const honeypotBloqueou = await page.evaluate(() => window.__opened === null);
+  log('Honeypot bloqueia envio automatizado (bot)', honeypotBloqueou);
+
+  // ---------- Acessibilidade: foco visível via teclado ----------
+  await page.keyboard.press('Tab');
+  const focoAlgumElemento = await page.evaluate(() => document.activeElement.tagName);
+  log('Navegação por teclado move o foco', !!focoAlgumElemento, focoAlgumElemento);
+
+  // ---------- Console limpo ----------
+  log('Nenhum erro de console durante os testes', consoleErrors.length === 0, JSON.stringify(consoleErrors).slice(0, 500));
+} finally {
+  await browser.close();
+}
+
+const falhas = results.filter((r) => !r.ok);
+console.log('\n===== RESUMO QA =====');
+console.log(`${results.length - falhas.length}/${results.length} verificações OK`);
+if (falhas.length) {
+  console.log('Falhas:');
+  falhas.forEach((f) => console.log(' - ' + f.name + (f.detail ? ' :: ' + f.detail : '')));
+  process.exit(1);
+}

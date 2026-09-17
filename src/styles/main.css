@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  body {
+    @apply bg-neutra-off text-navy font-body antialiased;
+  }
+  h1, h2, h3, h4 {
+    @apply font-heading font-bold text-navy;
+  }
+  ::selection {
+    @apply bg-laranja/20 text-navy;
+  }
+  /* Foco visível consistente (WCAG 2.4.7) em todos os elementos interativos */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 3px solid #E24125;
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  /* Rótulo / categoria — caixa alta com tracking amplo (manual pág. 18) */
+  .label-categoria {
+    @apply font-mono text-xs uppercase tracking-label text-laranja;
+  }
+
+  /* Filete de marcação — 3 a 4 px laranja (manual pág. 22) */
+  .filete {
+    @apply block h-1 w-14 bg-laranja;
+  }
+
+  /* Box legal — citação de norma com barra lateral, sem cantos arredondados (manual pág. 22) */
+  .box-legal {
+    @apply border-l-4 border-laranja bg-white pl-5 pr-4 py-4 font-mono text-sm text-neutra-100/90;
+  }
+
+  /* Numeração de etapas — mono laranja (manual pág. 22) */
+  .etapa-numero {
+    @apply font-mono text-2xl text-laranja;
+  }
+
+  .btn-primario {
+    @apply inline-flex items-center justify-center gap-2 bg-laranja px-7 py-3.5 font-heading text-sm font-bold uppercase tracking-[0.08em] text-white transition-colors duration-150 hover:bg-[#c6371e] focus-visible:bg-[#c6371e];
+  }
+
+  .btn-secundario {
+    @apply inline-flex items-center justify-center gap-2 border-2 border-navy px-7 py-3 font-heading text-sm font-bold uppercase tracking-[0.08em] text-navy transition-colors duration-150 hover:bg-navy hover:text-white;
+  }
+
+  .container-doc {
+    @apply mx-auto w-full max-w-[1240px] px-6 sm:px-10;
+  }
+
+  .campo-form {
+    @apply w-full border border-neutra-40 bg-white px-4 py-3 font-body text-[15px] text-navy placeholder:text-neutra-60 focus:border-laranja focus:outline-none;
+  }
+
+  .campo-form[aria-invalid='true'] {
+    @apply border-laranja bg-laranja/5;
+  }
+}
