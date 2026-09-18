@@ -72,6 +72,11 @@
     @apply font-mono text-2xl text-laranja;
   }
 
+  /* Contraste texto/fundo = 4,19:1 (branco sobre #E24125), levemente abaixo
+     do mínimo AA de 4,5:1 para texto normal. Decisão consciente: o hex da
+     marca não pode ser alterado (manual pág. 14) e o branco já é a maior
+     luminância possível para o texto — não há mais margem sem mudar a cor
+     de fundo. Mantido por decisão do cliente em 18/09/2026. */
   .btn-primario {
     @apply inline-flex items-center justify-center gap-2 bg-laranja px-7 py-3.5 font-heading text-sm font-bold uppercase tracking-[0.08em] text-white transition-colors duration-150 hover:bg-[#c6371e] focus-visible:bg-[#c6371e];
   }

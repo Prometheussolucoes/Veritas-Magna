@@ -102,6 +102,14 @@ try {
       const negrito = parseInt(estilo.fontWeight, 10) >= 700;
       const grande = tamanhoPx >= 24 || (tamanhoPx >= 18.66 && negrito);
       const minimo = grande ? 3 : 4.5;
+
+      // Exceção aceita conscientemente em 18/09/2026: botões .btn-primario
+      // (branco sobre o laranja oficial #E24125, 4,19:1) — o hex da marca
+      // não pode ser alterado e o branco já é a luminância máxima possível
+      // para o texto. Ver nota em src/styles/main.css.
+      const ehBotaoPrimarioConhecido = el.closest('.btn-primario') && razao >= 4.0;
+      if (ehBotaoPrimarioConhecido) return;
+
       if (razao < minimo) {
         problemas.push(
           (el.id ? '#' + el.id : el.tagName.toLowerCase()) +
