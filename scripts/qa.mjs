@@ -78,13 +78,29 @@ try {
       return l1 > l2 ? l1 / l2 : l2 / l1;
     }
     function corDeFundoEfetiva(el) {
+      // Percorre a cadeia de ancestrais e compõe camadas translúcidas
+      // (ex.: bg-white/5) sobre a cor sólida mais próxima, em vez de
+      // tratar a primeira camada com alpha > 0 como se fosse opaca.
+      const camadas = [];
       let atual = el;
       while (atual) {
         const cor = paraRgb(getComputedStyle(atual).backgroundColor);
-        if (cor && cor.a > 0) return cor;
+        if (cor && cor.a > 0) {
+          camadas.push(cor);
+          if (cor.a >= 0.999) break;
+        }
         atual = atual.parentElement;
       }
-      return { r: 255, g: 255, b: 255, a: 1 };
+      let resultado = { r: 255, g: 255, b: 255 };
+      for (let i = camadas.length - 1; i >= 0; i--) {
+        const c = camadas[i];
+        resultado = {
+          r: c.r * c.a + resultado.r * (1 - c.a),
+          g: c.g * c.a + resultado.g * (1 - c.a),
+          b: c.b * c.a + resultado.b * (1 - c.a),
+        };
+      }
+      return resultado;
     }
 
     const problemas = [];
@@ -143,6 +159,17 @@ try {
   await page.click('#menu-toggle');
   const menuFechadoDeNovo = await page.$eval('#menu-mobile', (el) => el.classList.contains('hidden'));
   log('Menu mobile fecha ao clicar novamente', menuFechadoDeNovo);
+
+  await page.click('#menu-toggle');
+  await new Promise((r) => setTimeout(r, 100));
+  await page.mouse.click(200, 700);
+  await new Promise((r) => setTimeout(r, 100));
+  const menuFechadoAoClicarFora = await page.$eval('#menu-mobile', (el) => el.classList.contains('hidden'));
+  const ariaFechadoAoClicarFora = await page.$eval('#menu-toggle', (el) => el.getAttribute('aria-expanded'));
+  log(
+    'Menu mobile fecha ao clicar fora dele',
+    menuFechadoAoClicarFora && ariaFechadoAoClicarFora === 'false'
+  );
 
   // ---------- Modal política de privacidade + bloqueio de scroll ----------
   await page.setViewport({ width: 1440, height: 900 });
