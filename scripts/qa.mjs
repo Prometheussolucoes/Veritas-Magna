@@ -171,21 +171,68 @@ try {
     menuFechadoAoClicarFora && ariaFechadoAoClicarFora === 'false'
   );
 
-  // ---------- Modal política de privacidade + bloqueio de scroll ----------
+  // ---------- Modal de preferências de cookies + bloqueio de scroll ----------
   await page.setViewport({ width: 1440, height: 900 });
+  await page.click('#btn-preferencias-cookies');
+  await new Promise((r) => setTimeout(r, 100));
+  const modalAberto = await page.$eval('#modal-cookies', (el) => !el.classList.contains('hidden'));
+  const bodyOverflowAberto = await page.evaluate(() => getComputedStyle(document.body).overflow);
+  log('Modal de preferências de cookies abre', modalAberto);
+  log('Rolagem do body bloqueada com modal aberto', bodyOverflowAberto === 'hidden', bodyOverflowAberto);
+
+  await page.click('#modal-cookies [data-fecha-modal]');
+  await new Promise((r) => setTimeout(r, 100));
+  const modalFechado = await page.$eval('#modal-cookies', (el) => el.classList.contains('hidden'));
+  const bodyOverflowFechado = await page.evaluate(() => getComputedStyle(document.body).overflow);
+  log('Modal de preferências de cookies fecha', modalFechado);
+  log('Rolagem do body restaurada após fechar modal', bodyOverflowFechado !== 'hidden', bodyOverflowFechado);
+
+  // ---------- Modal de política de privacidade ----------
   await page.click('[data-abre-modal="modal-privacidade"]');
   await new Promise((r) => setTimeout(r, 100));
-  const modalAberto = await page.$eval('#modal-privacidade', (el) => !el.classList.contains('hidden'));
-  const bodyOverflowAberto = await page.evaluate(() => getComputedStyle(document.body).overflow);
-  log('Modal de privacidade abre', modalAberto);
-  log('Rolagem do body bloqueada com modal aberto', bodyOverflowAberto === 'hidden', bodyOverflowAberto);
+  const modalPrivacidadeAberto = await page.$eval('#modal-privacidade', (el) => !el.classList.contains('hidden'));
+  log('Modal de política de privacidade abre', modalPrivacidadeAberto);
+
+  const linkDownloadNoModal = await page.$eval('#modal-privacidade a[href$="termo-uso-politica-privacidade-veritas-magna.pdf"]', (a) => ({
+    target: a.getAttribute('target'),
+    rel: a.getAttribute('rel') || '',
+  })).catch(() => null);
+  log('Modal de privacidade tem link de download do PDF completo', !!linkDownloadNoModal, JSON.stringify(linkDownloadNoModal));
 
   await page.click('#modal-privacidade [data-fecha-modal]');
   await new Promise((r) => setTimeout(r, 100));
-  const modalFechado = await page.$eval('#modal-privacidade', (el) => el.classList.contains('hidden'));
-  const bodyOverflowFechado = await page.evaluate(() => getComputedStyle(document.body).overflow);
-  log('Modal de privacidade fecha', modalFechado);
-  log('Rolagem do body restaurada após fechar modal', bodyOverflowFechado !== 'hidden', bodyOverflowFechado);
+  const modalPrivacidadeFechado = await page.$eval('#modal-privacidade', (el) => el.classList.contains('hidden'));
+  log('Modal de política de privacidade fecha', modalPrivacidadeFechado);
+
+  // ---------- Links de documentos legais (PDF) ----------
+  const linksLegais = await page.evaluate(() =>
+    Array.from(
+      document.querySelectorAll(
+        'a[href$="codigo-etica-veritas-magna.pdf"], a[href$="politica-compliance-canal-denuncias-veritas-magna.pdf"], a[href$="termo-uso-politica-privacidade-veritas-magna.pdf"]'
+      )
+    ).map((a) => ({
+      href: a.getAttribute('href'),
+      target: a.getAttribute('target'),
+      rel: a.getAttribute('rel') || '',
+    }))
+  );
+  log('Os 3 documentos legais têm ao menos um link cada', linksLegais.length >= 3, JSON.stringify(linksLegais));
+  const linksLegaisSeguros = linksLegais.every(
+    (l) => l.target === '_blank' && l.rel.includes('noopener') && l.rel.includes('noreferrer')
+  );
+  log('Links de documentos legais abrem em nova aba com rel seguro', linksLegaisSeguros);
+
+  for (const link of linksLegais) {
+    const resposta = await page.evaluate(async (href) => {
+      const r = await fetch(href, { method: 'HEAD' });
+      return { ok: r.ok, status: r.status, tipo: r.headers.get('content-type') };
+    }, link.href);
+    log(
+      `PDF acessível: ${link.href}`,
+      resposta.ok && (resposta.tipo || '').includes('pdf'),
+      JSON.stringify(resposta)
+    );
+  }
 
   // ---------- Cookie banner + localStorage ----------
   const bannerVisivelInicial = await page.$eval('#banner-cookies', (el) => !el.classList.contains('hidden'));

@@ -523,7 +523,7 @@
         })
         .catch(function () {
           clearTimeout(tempoLimite);
-          var url = 'https://wa.me/5524992693877?text=' + encodeURIComponent(montarMensagemWhatsapp(dados));
+          var url = 'https://wa.me/5521976803952?text=' + encodeURIComponent(montarMensagemWhatsapp(dados));
           window.open(url, '_blank', 'noopener,noreferrer');
           if (statusEl) {
             statusEl.textContent = 'Solicitação preparada. Concluímos o envio agora pelo WhatsApp.';
