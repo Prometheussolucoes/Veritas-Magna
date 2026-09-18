@@ -57,6 +57,66 @@ try {
   );
   log('Todas as imagens têm atributo alt', imagesWithoutAlt === 0, 'sem alt=' + imagesWithoutAlt);
 
+  // ---------- Contraste texto/fundo (evita texto "invisível" sobre fundos escuros) ----------
+  const problemasDeContraste = await page.evaluate(() => {
+    function paraRgb(cor) {
+      const m = cor.match(/rgba?\(([^)]+)\)/);
+      if (!m) return null;
+      const partes = m[1].split(',').map((v) => parseFloat(v.trim()));
+      return { r: partes[0], g: partes[1], b: partes[2], a: partes.length > 3 ? partes[3] : 1 };
+    }
+    function luminancia({ r, g, b }) {
+      const canal = (v) => {
+        const c = v / 255;
+        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * canal(r) + 0.7152 * canal(g) + 0.0722 * canal(b);
+    }
+    function contraste(a, b) {
+      const l1 = luminancia(a) + 0.05;
+      const l2 = luminancia(b) + 0.05;
+      return l1 > l2 ? l1 / l2 : l2 / l1;
+    }
+    function corDeFundoEfetiva(el) {
+      let atual = el;
+      while (atual) {
+        const cor = paraRgb(getComputedStyle(atual).backgroundColor);
+        if (cor && cor.a > 0) return cor;
+        atual = atual.parentElement;
+      }
+      return { r: 255, g: 255, b: 255, a: 1 };
+    }
+
+    const problemas = [];
+    document.querySelectorAll('h1, h2, h3, h4, p, span, a, button, label').forEach((el) => {
+      const texto = (el.textContent || '').trim();
+      if (!texto || el.children.length > 0) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const estilo = getComputedStyle(el);
+      const corTexto = paraRgb(estilo.color);
+      if (!corTexto || corTexto.a === 0) return;
+      const fundo = corDeFundoEfetiva(el);
+      const razao = contraste(corTexto, fundo);
+      const tamanhoPx = parseFloat(estilo.fontSize);
+      const negrito = parseInt(estilo.fontWeight, 10) >= 700;
+      const grande = tamanhoPx >= 24 || (tamanhoPx >= 18.66 && negrito);
+      const minimo = grande ? 3 : 4.5;
+      if (razao < minimo) {
+        problemas.push(
+          (el.id ? '#' + el.id : el.tagName.toLowerCase()) +
+            ' "' + texto.slice(0, 40) + '" razão=' + razao.toFixed(2) + ' (mín ' + minimo + ')'
+        );
+      }
+    });
+    return problemas;
+  });
+  log(
+    'Contraste texto/fundo dentro do mínimo WCAG AA em todos os elementos',
+    problemasDeContraste.length === 0,
+    problemasDeContraste.slice(0, 10).join(' | ')
+  );
+
   // ---------- Menu mobile ----------
   await page.setViewport({ width: 375, height: 800 });
   await page.reload({ waitUntil: 'networkidle0' });

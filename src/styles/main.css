@@ -40,9 +40,21 @@
 }
 
 @layer components {
-  /* Rótulo / categoria — caixa alta com tracking amplo (manual pág. 18) */
+  /* Rótulo / categoria — caixa alta com tracking amplo (manual pág. 18).
+     Cor do texto em navy/branco (nunca laranja) para atender ao mínimo de
+     contraste AA — o manual também restringe laranja a uso pontual, nunca
+     como cor de texto de leitura (pág. 16). O acento laranja da marca fica
+     no marcador quadrado antes do rótulo. */
   .label-categoria {
-    @apply font-mono text-xs uppercase tracking-label text-laranja;
+    @apply inline-flex items-center gap-2 font-mono text-xs uppercase tracking-label text-navy;
+  }
+  .label-categoria::before {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    background-color: #e24125;
+    flex-shrink: 0;
   }
 
   /* Filete de marcação — 3 a 4 px laranja (manual pág. 22) */
